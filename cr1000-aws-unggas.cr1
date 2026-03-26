@@ -95,9 +95,9 @@ BeginProg
     ' 4WPB100 occupies Diff 1 (SE1/SE2), PT100 sense occupies Diff 2 (SE3/SE4). 
     ' Excitation is assigned to Vx1. A 2000 mV excitation is utilized to minimize 
     ' undesirable resistive self-heating within the platinum element.
-    BrHalf4W (Rs_R0_Ratio, 1, mV25, mV25, 1, Vx1, 1, 2000, True, True, 0, _60Hz, 1.0, 0)
+    BrHalf4W (Rs_R0_Ratio, 1, mV250, mV250, 1, Vx1, 1, 2500, True, True, 0, 250, 1.0, 0)
     ' Convert the measured raw resistance ratio into absolute temperature (Celsius)
-    PRT (AirTemp_C, 1, Rs_R0_Ratio, 1.0, 0)
+    PRTCalc (AirTemp_C, 1, Rs_R0_Ratio, 0, 1, 0)
     
     ' --------------------------------------------------------------------------
     ' RM Young 05103V Wind Monitor Processing Subroutine
