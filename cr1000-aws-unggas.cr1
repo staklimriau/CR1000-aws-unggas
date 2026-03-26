@@ -1,0 +1,143 @@
+==============================================================================
+' Advanced Meteorological Acquisition Script
+' Hardware Architecture: Campbell Scientific CR1000
+' Execution Interval: 5 Seconds
+' Data Archival: 10-Minute Averages, Vectors, and Totals
+' ==============================================================================
+
+' ------------------------------------------------------------------------------
+' 1. System Variable Declarations
+' ------------------------------------------------------------------------------
+Public Batt_Volt      As Float
+Public Pnl_Temp       As Float
+
+' Thies Clima 1.1005.54.000 Parameters
+Public AirTemp_C      As Float
+Public RelHum         As Float
+Public Rs_R0_Ratio    As Float  ' Intermediate ratio variable for 4WPB100 calculation
+
+' RM Young 05103V Parameters
+Public WindSpd_ms     As Float
+Public WindDir_Deg    As Float
+
+' Kipp & Zonen SMP3-V Parameters
+Public SlrRad_Wm2     As Float
+
+' Vaisala PTB110 Parameters
+Public BaroPress_hPa  As Float
+
+' Rimco RIM8020 Parameters
+Public Rain_mm        As Float
+
+' ------------------------------------------------------------------------------
+' 2. Engineering Units Definition for LoggerNet Metadata
+' ------------------------------------------------------------------------------
+Units Batt_Volt     = Volts
+Units Pnl_Temp      = DegC
+Units AirTemp_C     = DegC
+Units RelHum        = %
+Units WindSpd_ms    = m/s
+Units WindDir_Deg   = Degrees
+Units SlrRad_Wm2    = W/m^2
+Units BaroPress_hPa = hPa
+Units Rain_mm       = mm
+
+' ------------------------------------------------------------------------------
+' 3. Data Table Definitions (WMO Compliant 10-Minute Archive)
+' ------------------------------------------------------------------------------
+DataTable (TenMin_MetData, True, -1)
+  DataInterval (0, 10, Min, 10)
+  
+  ' System Health Diagnostics
+  Minimum (1, Batt_Volt, FP2, False, False)
+  Minimum (1, Pnl_Temp, FP2, False, False)
+  
+  ' Thermodynamic Scalar Averages
+  Average (1, AirTemp_C, FP2, False)
+  Average (1, RelHum, FP2, False)
+  
+  ' Solar & Pressure Scalar Averages
+  Average (1, SlrRad_Wm2, FP2, False)
+  Average (1, BaroPress_hPa, IEEE4, False) ' IEEE4 format retains maximal pressure resolution
+  
+  ' Wind Kinematics (Unit Vector Averaging)
+  WindVector (1, WindSpd_ms, WindDir_Deg, FP2, False, 0, 0, 1)
+  FieldNames("WindSpd_Mean, WindDir_VecMean, WindDir_StdDev")
+  ' Wind Gust calculation based on 5-second maxima
+  Maximum (1, WindSpd_ms, FP2, False, True) 
+  
+  ' Precipitation Totalization
+  Totalize (1, Rain_mm, FP2, False)
+EndTable
+
+' ------------------------------------------------------------------------------
+' 4. Primary Measurement Sequence Architecture
+' ------------------------------------------------------------------------------
+BeginProg
+  ' Execute primary measurement pipeline every 5 seconds
+  Scan (5, Sec, 0, 0)
+    
+    ' Internal System Diagnostics
+    Battery (Batt_Volt)
+    PanelTemp (Pnl_Temp, _60Hz) ' Utilizes 60Hz AC noise rejection
+    
+    ' --------------------------------------------------------------------------
+    ' Thies Clima T/RH Sensor Processing Subroutine
+    ' --------------------------------------------------------------------------
+    ' Relative Humidity (0-1V mapped to 0-100%)
+    ' Terminated on SE5. Assigned to the 2500mV range to prevent high-end signal clipping.
+    VoltSe (RelHum, 1, mV2500, 5, 1, 0, _60Hz, 0.1, 0)
+    ' Strict boundary enforcement to eliminate physically impossible transients
+    If RelHum > 100 Then RelHum = 100
+    If RelHum < 0 Then RelHum = 0
+    
+    ' Air Temperature via 4WPB100 (4-Wire Half Bridge Topology)
+    ' 4WPB100 occupies Diff 1 (SE1/SE2), PT100 sense occupies Diff 2 (SE3/SE4). 
+    ' Excitation is assigned to Vx1. A 2000 mV excitation is utilized to minimize 
+    ' undesirable resistive self-heating within the platinum element.
+    BrHalf4W (Rs_R0_Ratio, 1, mV25, mV25, 1, Vx1, 1, 2000, True, True, 0, _60Hz, 1.0, 0)
+    ' Convert the measured raw resistance ratio into absolute temperature (Celsius)
+    PRT (AirTemp_C, 1, Rs_R0_Ratio, 1.0, 0)
+    
+    ' --------------------------------------------------------------------------
+    ' RM Young 05103V Wind Monitor Processing Subroutine
+    ' --------------------------------------------------------------------------
+    ' Wind Speed (0-5V mapped to 0-100 m/s). Terminated on SE7. 5000mV range required.
+    VoltSe (WindSpd_ms, 1, mV5000, 7, 1, 0, _60Hz, 0.02, 0)
+    If WindSpd_ms < 0 Then WindSpd_ms = 0
+    
+    ' Wind Direction (0-5V mapped to 0-360 Deg). Terminated on SE8. 5000mV range required.
+    VoltSe (WindDir_Deg, 1, mV5000, 8, 1, 0, _60Hz, 0.072, 0)
+    If WindDir_Deg >= 360 Then WindDir_Deg = 0
+    If WindDir_Deg < 0 Then WindDir_Deg = 0
+    
+    ' --------------------------------------------------------------------------
+    ' Kipp & Zonen SMP3-V Solar Radiation Processing Subroutine
+    ' --------------------------------------------------------------------------
+    ' Solar Irradiance (0-1V mapped to -200 to 2000 W/m2). Terminated on SE6. 2500mV range.
+    VoltSe (SlrRad_Wm2, 1, mV2500, 6, 1, 0, _60Hz, 2.2, -200)
+    ' Algorithmic filtering of negative nighttime thermal drifts inherent to thermopiles
+    If SlrRad_Wm2 < 0 Then SlrRad_Wm2 = 0
+    
+    ' --------------------------------------------------------------------------
+    ' Vaisala PTB110 Barometric Pressure Processing Subroutine
+    ' --------------------------------------------------------------------------
+    ' Pressure (0-5V mapped to 500-1100 hPa). Terminated on SE9. 5000mV range required.
+    VoltSe (BaroPress_hPa, 1, mV5000, 9, 1, 0, _60Hz, 0.12, 500)
+    
+    ' --------------------------------------------------------------------------
+    ' Rimco RIM8020 Precipitation Processing Subroutine
+    ' --------------------------------------------------------------------------
+    ' High-frequency debounced switch closure monitoring on Pulse Channel 1 (P1). 
+    ' Calibrated to a 0.2mm mechanical bucket volume.
+    PulseCount (Rain_mm, 1, 1, 2, 0, 1.0, 0)
+    Rain_mm = Rain_mm * 0.2
+    
+    ' --------------------------------------------------------------------------
+    ' Data Table Execution Trigger
+    ' --------------------------------------------------------------------------
+    ' Call the archive table on every scan; the table handles the 10-minute logic internally
+    CallTable TenMin_MetData
+
+  NextScan
+EndProg
