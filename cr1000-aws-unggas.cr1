@@ -6,6 +6,7 @@
 ' Logs:
 ' 1. 26-03-26 add logs line by Satria
 ' 2. 26-03-26 update line PRTCalc() dan BrHalf4W() agar sesuai manual Campbell
+' 3. 27-03-26 mengubah var name Rs_R0_Ratio menjadi Rs_R0 by Satria
 ' ==============================================================================
 
 ' ------------------------------------------------------------------------------
@@ -17,7 +18,7 @@ Public Pnl_Temp       As Float
 ' Thies Clima 1.1005.54.000 Parameters
 Public AirTemp_C      As Float
 Public RelHum         As Float
-Public Rs_R0_Ratio    As Float  ' Intermediate ratio variable for 4WPB100 calculation
+Public Rs_R0    As Float  ' Intermediate ratio variable for 4WPB100 calculation
 
 ' RM Young 05103V Parameters
 Public WindSpd_ms     As Float
@@ -98,9 +99,9 @@ BeginProg
     ' 4WPB100 occupies Diff 1 (SE1/SE2), PT100 sense occupies Diff 2 (SE3/SE4). 
     ' Excitation is assigned to Vx1. A 2000 mV excitation is utilized to minimize 
     ' undesirable resistive self-heating within the platinum element.
-    BrHalf4W (Rs_R0_Ratio, 1, mV250, mV250, 1, Vx1, 1, 2500, True, True, 0, 250, 1.0, 0)
+    BrHalf4W (Rs_R0, 1, mV250, mV250, 1, Vx1, 1, 2500, True, True, 0, 250, 1.0, 0)
     ' Convert the measured raw resistance ratio into absolute temperature (Celsius)
-    PRTCalc (AirTemp_C, 1, Rs_R0_Ratio, 0, 1, 0)
+    PRTCalc (AirTemp_C, 1, Rs_R0, 0, 1, 0)
     
     ' --------------------------------------------------------------------------
     ' RM Young 05103V Wind Monitor Processing Subroutine
