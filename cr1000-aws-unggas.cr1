@@ -3,6 +3,9 @@
 ' Hardware Architecture: Campbell Scientific CR1000
 ' Execution Interval: 5 Seconds
 ' Data Archival: 10-Minute Averages, Vectors, and Totals
+' Logs:
+' 1. 26-03-26 add logs line by Satria
+' 2. 26-03-26 update line PRTCalc() dan BrHalf4W() agar sesuai manual Campbell
 ' ==============================================================================
 
 ' ------------------------------------------------------------------------------
