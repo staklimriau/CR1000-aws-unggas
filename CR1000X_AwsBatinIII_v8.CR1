@@ -1,0 +1,48 @@
+'Program CR1000 Final (Format .CR1)
+'Sensor: Hygro-Thermo Transmitter (Pt100 + 0-1V RH)
+'Hapus semua perintah MQTT karena CR1000 tidak mendukung secara native.
+
+'--- Deklarasi Variabel ---
+Public TA_meas
+Public TA_ohm  'Suhu Udara (Celsius)
+Public RH_meas  'Kelembapan Relatif (%)
+Public TA_Fah   'Suhu dalam Fahrenheit
+
+'--- Unit Satuan ---
+Units TA_meas = degC
+Units RH_meas = %
+Units TA_Fah = degF
+
+'--- Tabel Penyimpanan Data (Setiap 60 Menit) ---
+DataTable(Data_Sensor,True,-1)
+  DataInterval(0,60,Min,10)
+  Average(1,TA_meas,FP2,False)
+  Average(1,RH_meas,FP2,False)
+EndTable
+
+'--- Program Utama ---
+BeginProg
+  'Scan setiap 5 detik
+  Scan(5,Sec,1,0)
+    
+    '1. Mengukur Suhu (Pt100 via Modul 3-Port di Kanal 5)
+    'Pastikan Pin 7 & 8 digabung di terminal H
+    'Gunakan BrFull (12 parameter) untuk CR1000
+    BrFull(TA_ohm, 1, mV2500, 2, Vx1, 1, 2000, True, True, 0, 250, 10, -1.5)
+    TA_meas = (TA_ohm - 40) / 0.385
+    'PRT(TA_meas, 1, TA_ohm, 1, 0)
+    
+    '2. Mengukur Kelembapan (Kanal 1 Single-Ended)
+    'Pin 1 ke 1H, Pin 2 ke Ground
+    VoltSe(RH_meas, 1, mV2500, 1, True, 0, 250,0.1,-1.15)'Constraint RH agar tetap di antara 0-100% ()
+    If RH_meas > 100 Then RH_meas = 100
+    If RH_meas < 0 Then RH_meas = 0
+    
+    '3. Konversi C ke F (Hanya untuk tampilan jika perlu)
+    TA_Fah = TA_meas * 1.8 + 32
+    
+    'Panggil Tabel Data
+    CallTable Data_Sensor
+    
+  NextScan
+EndProg
